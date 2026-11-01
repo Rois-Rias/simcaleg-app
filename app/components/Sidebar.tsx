@@ -3,13 +3,31 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
+import { useEffect, useState } from 'react';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    });
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') setDeferredPrompt(null);
+    }
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem('role');
     router.push('/');
   };
 
@@ -41,9 +59,16 @@ export default function Sidebar() {
         </nav>
       </div>
       
-      <button onClick={handleLogout} className="mt-8 text-left px-4 py-2 text-red-300 hover:text-white hover:bg-red-600 rounded-lg transition">
-        Logout
-      </button>
+      <div className="mt-8 space-y-2">
+        {deferredPrompt && (
+          <button onClick={handleInstallClick} className="w-full text-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition font-semibold text-sm">
+            📲 Install Aplikasi
+          </button>
+        )}
+        <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-red-300 hover:text-white hover:bg-red-600 rounded-lg transition">
+          Logout
+        </button>
+      </div>
     </aside>
   );
 }

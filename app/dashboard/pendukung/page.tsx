@@ -6,8 +6,8 @@ import { supabase } from '../../../lib/supabase';
 export default function DataPendukung() {
   const [data, setData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [role, setRole] = useState('relawan');
   
-  // State untuk Form (Tambah & Edit)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -29,10 +29,31 @@ export default function DataPendukung() {
   };
 
   useEffect(() => {
+    const userRole = localStorage.getItem('role') || 'relawan';
+    setRole(userRole);
     fetchPendukung();
   }, []);
 
-  // FUNGSI YANG TADI HILANG: Membuka Modal Tambah
+  const exportToCSV = () => {
+    if (data.length === 0) return alert('Tidak ada data untuk diekspor');
+    const headers = ['Nama', 'NIK', 'Alamat', 'Status Dukungan'];
+    const rows = data.map((item) => [
+      `"${item.nama}"`, 
+      `"${item.nik || ''}"`, 
+      `"${item.alamat || ''}"`, 
+      `"${item.status_dukungan}"`
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Data_Pendukung_${new Date().toLocaleDateString('id-ID')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleBukaTambah = () => {
     setIsEditMode(false);
     setEditId(null);
@@ -89,21 +110,25 @@ export default function DataPendukung() {
 
   return (
     <div>
-      {/* HEADER (Tanpa Sidebar karena sudah dibungkus Layout) */}
-      <header className="flex justify-between items-center mb-6">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Data Pendukung</h2>
           <p className="text-gray-500 text-sm">Daftar warga yang telah didata oleh tim relawan.</p>
         </div>
-        <button 
-          onClick={handleBukaTambah}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 shadow-sm transition"
-        >
-          + Tambah Pendukung
-        </button>
+        <div className="flex gap-2">
+          <button onClick={exportToCSV} className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 shadow-sm">
+            Export CSV
+          </button>
+          
+          {/* Cek RBAC: Jika Caleg, tombol tambah hilang */}
+          {role !== 'caleg' && (
+            <button onClick={handleBukaTambah} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 shadow-sm">
+              + Tambah Pendukung
+            </button>
+          )}
+        </div>
       </header>
 
-      {/* TABEL DATA */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -137,18 +162,17 @@ export default function DataPendukung() {
                       </span>
                     </td>
                     <td className="p-4 text-center space-x-2">
-                      <button 
-                        onClick={() => handleBukaEdit(item)}
-                        className="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md text-sm font-medium transition"
-                      >
-                        Edit
-                      </button>
-                      <button 
-                        onClick={() => handleHapus(item.id)}
-                        className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md text-sm font-medium transition"
-                      >
-                        Hapus
-                      </button>
+                      {/* Cek RBAC: Jika Caleg, tombol edit & hapus hilang */}
+                      {role !== 'caleg' && (
+                        <>
+                          <button onClick={() => handleBukaEdit(item)} className="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md text-sm font-medium transition">
+                            Edit
+                          </button>
+                          <button onClick={() => handleHapus(item.id)} className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md text-sm font-medium transition">
+                            Hapus
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -158,7 +182,6 @@ export default function DataPendukung() {
         </div>
       </div>
 
-      {/* MODAL POP-UP (TAMBAH / EDIT) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
@@ -171,17 +194,14 @@ export default function DataPendukung() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap *</label>
                 <input required type="text" value={formData.nama} onChange={(e) => setFormData({...formData, nama: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">NIK (Opsional)</label>
                 <input type="text" value={formData.nik} onChange={(e) => setFormData({...formData, nik: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Alamat / RT RW</label>
                 <input type="text" value={formData.alamat} onChange={(e) => setFormData({...formData, alamat: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status Dukungan</label>
                 <select value={formData.status_dukungan} onChange={(e) => setFormData({...formData, status_dukungan: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
@@ -190,7 +210,6 @@ export default function DataPendukung() {
                   <option value="Oposisi">Oposisi</option>
                 </select>
               </div>
-
               <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg">Batal</button>
                 <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-blue-300">

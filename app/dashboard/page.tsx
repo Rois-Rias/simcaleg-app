@@ -1,66 +1,99 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '../lib/supabase';
 
-export default function Dashboard() {
-  const [stats, setStats] = useState({
-    pendukung: 0, relawan: 0, logistik: 0, suaraMasuk: 0
-  });
-  const [isLoading, setIsLoading] = useState(true);
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      const [resPendukung, resRelawan, resLogistik, resSuara] = await Promise.all([
-        supabase.from('pendukung').select('*', { count: 'exact', head: true }),
-        supabase.from('relawan').select('*', { count: 'exact', head: true }),
-        supabase.from('logistik').select('*', { count: 'exact', head: true }),
-        supabase.from('quick_count').select('*', { count: 'exact', head: true }),
-      ]);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setErrorMsg('');
 
-      setStats({
-        pendukung: resPendukung.count || 0,
-        relawan: resRelawan.count || 0,
-        logistik: resLogistik.count || 0,
-        suaraMasuk: resSuara.count || 0,
-      });
+    // 1. Login menggunakan Supabase Auth
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
+
+    if (error) {
+      setErrorMsg(`Gagal Masuk: ${error.message}`);
       setIsLoading(false);
-    };
-    fetchStats();
-  }, []);
+      return;
+    }
+
+    // 2. Ambil data Role (caleg/relawan) dari tabel users
+    const { data: userData } = await supabase
+      .from('users')
+      .select('role')
+      .eq('email', email)
+      .single();
+
+    // 3. Simpan Role ke browser untuk keperluan keamanan UI
+    localStorage.setItem('role', userData?.role || 'relawan');
+
+    router.push('/dashboard');
+  };
 
   return (
-    <div>
-      <header className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Dashboard Pemenangan</h2>
-        <p className="text-gray-500 text-sm">Ringkasan data lapangan secara realtime.</p>
-      </header>
+    <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+        
+        <div className="text-center mb-8">
+          <div className="mx-auto w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mb-4">
+            <span className="text-white text-2xl font-bold">SC</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-800">SIMCALEG</h1>
+          <p className="text-gray-500 text-sm mt-1">Sistem Informasi Manajemen Caleg</p>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-          <p className="text-sm text-gray-500 font-medium">Total Pendukung</p>
-          <p className="text-3xl font-bold text-blue-600 mt-1">{isLoading ? '-' : stats.pendukung}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-          <p className="text-sm text-gray-500 font-medium">Relawan Aktif</p>
-          <p className="text-3xl font-bold text-green-600 mt-1">{isLoading ? '-' : stats.relawan}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-          <p className="text-sm text-gray-500 font-medium">Item Logistik</p>
-          <p className="text-3xl font-bold text-orange-600 mt-1">{isLoading ? '-' : stats.logistik}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-          <p className="text-sm text-gray-500 font-medium">TPS Sudah Input C1</p>
-          <p className="text-3xl font-bold text-purple-600 mt-1">{isLoading ? '-' : stats.suaraMasuk}</p>
-        </div>
-      </div>
+        {errorMsg && (
+          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm text-center font-medium">
+            {errorMsg}
+          </div>
+        )}
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 min-h-[300px]">
-        <h3 className="font-bold text-gray-800 mb-4">Peta Sebaran Pendukung (Segera Hadir)</h3>
-        <div className="w-full h-full flex items-center justify-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 text-gray-400">
-          (Integrasi Peta Wilayah akan ditambahkan di fase berikutnya)
-        </div>
+        <form onSubmit={handleLogin} className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input 
+              type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900" 
+              placeholder="caleg@simcaleg.com" 
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900" 
+              placeholder="••••••••" 
+            />
+          </div>
+
+          <button 
+            type="submit" 
+            disabled={isLoading}
+            className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-200 mt-2 disabled:bg-blue-300"
+          >
+            {isLoading ? 'Memeriksa...' : 'Masuk ke Sistem'}
+          </button>
+        </form>
+
       </div>
-    </div>
+    </main>
   );
 }
