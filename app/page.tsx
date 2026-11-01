@@ -16,23 +16,15 @@ export default function LoginPage() {
     setIsLoading(true);
     setErrorMsg('');
 
-    // Mencari user di database Supabase
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .eq('password', password)
-      .single();
+    // Menggunakan Supabase Auth yang aman
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
 
     if (error) {
-      // MENAMPILKAN ERROR ASLI DARI SUPABASE
-      setErrorMsg(`Error Sistem: ${error.message}`);
-      setIsLoading(false);
-      return;
-    }
-
-    if (!data) {
-      setErrorMsg('Email atau password tidak ditemukan di database.');
+      // Menampilkan pesan error dari Supabase (misal: password salah)
+      setErrorMsg(`Gagal Masuk: ${error.message}`);
       setIsLoading(false);
       return;
     }

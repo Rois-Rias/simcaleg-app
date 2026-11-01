@@ -5,7 +5,8 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/supabase/:path*',
-        destination: 'https://tkgbahpoqakspsddbelep.supabase.co/:path*',
+        // Hapus huruf 's' sebelum 'psddbelep'
+        destination: 'https://tkgbahpoqakpsddbelep.supabase.co/:path*',
       },
     ];
   },
