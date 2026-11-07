@@ -1,34 +1,42 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-import "leaflet/dist/leaflet.css"; // Wajib untuk Peta
+"use client";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Sidebar from "@/app/components/Sidebar";
+import { getRole } from "@/lib/rbac";
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata: Metadata = {
-  title: "SIMCALEG",
-  description: "Aplikasi Pemenangan Calon Legislatif",
-  manifest: "/manifest.ts",
-};
-
-export default function RootLayout({
+export default function DashboardLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
+  const router = useRouter();
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const role = getRole();
+    const hasSession = typeof window !== "undefined" && !!localStorage.getItem("simcaleg_role");
+    if (!hasSession || !role) {
+      router.replace("/");
+      return;
+    }
+    setReady(true);
+  }, [router]);
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-blue-50">
+        <p className="text-blue-800 font-medium animate-pulse">Memuat…</p>
+      </div>
+    );
+  }
+
   return (
-    <html lang="id">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {children}
-      </body>
-    </html>
+    <div className="min-h-screen bg-gray-100">
+      <Sidebar />
+      <main className="lg:pl-64 pt-14 lg:pt-0 min-h-screen">
+        <div className="p-4 sm:p-6 lg:p-8">{children}</div>
+      </main>
+    </div>
   );
 }
