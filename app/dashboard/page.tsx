@@ -1,99 +1,122 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '../lib/supabase';
+import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import { supabase } from "@/lib/supabase";
+import type { MapPoint } from "@/app/components/MapView";
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+const MapView = dynamic(() => import("@/app/components/MapView"), { ssr: false });
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setErrorMsg('');
+type Stats = {
+  pendukung: number;
+  relawan: number;
+  logistik: number;
+  suara_c1: number;
+  target_suara: number;
+  profil: any;
+};
 
-    // 1. Login menggunakan Supabase Auth
-    const { data: authData, error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    });
+type PendukungRow = {
+  id: number; nama: string; alamat: string | null; status_dukungan: string | null;
+  latitude: number | null; longitude: number | null;
+};
 
-    if (error) {
-      setErrorMsg(`Gagal Masuk: ${error.message}`);
-      setIsLoading(false);
-      return;
-    }
+function rand(seed: number) { return Math.sin(seed * 9301 + 49297) * 233280 % 1; }
 
-    // 2. Ambil data Role (caleg/relawan) dari tabel users
-    const { data: userData } = await supabase
-      .from('users')
-      .select('role')
-      .eq('email', email)
-      .single();
+export default function DashboardPage() {
+  const [stats, setStats] = useState<Stats>({ pendukung: 0, relawan: 0, logistik: 0, suara_c1: 0, target_suara: 0, profil: {} });
+  const [points, setPoints] = useState<MapPoint[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    // 3. Simpan Role ke browser untuk keperluan keamanan UI
-    localStorage.setItem('role', userData?.role || 'relawan');
+  useEffect(() => {
+    (async () => {
+      const [pCount, rCount, lCount, qCount, profilData, mapRows] = await Promise.all([
+        supabase.from("pendukung").select("*", { count: "exact", head: true }),
+        supabase.from("relawan").select("*", { count: "exact", head: true }),
+        supabase.from("logistik").select("*", { count: "exact", head: true }),
+        supabase.from("quick_count").select("suara_caleg"),
+        supabase.from("profil_caleg").select("*").limit(1).maybeSingle(),
+        supabase.from("pendukung").select("id, nama, alamat, status_dukungan, latitude, longitude").limit(500),
+      ]);
 
-    router.push('/dashboard');
-  };
+      const suaraC1 = (qCount.data ?? []).reduce((acc, curr) => acc + (curr.suara_caleg ?? 0), 0);
+      
+      setStats({
+        pendukung: pCount.count ?? 0,
+        relawan: rCount.count ?? 0,
+        logistik: lCount.count ?? 0,
+        suara_c1: suaraC1,
+        target_suara: profilData.data?.target_suara ?? 0,
+        profil: profilData.data ?? {}
+      });
+
+      const rows = (mapRows.data ?? []) as PendukungRow[];
+      setPoints(rows.map(r => {
+        const hasCoord = r.latitude !== null && r.longitude !== null;
+        return {
+          id: r.id, nama: r.nama, alamat: r.alamat, status: r.status_dukungan,
+          lat: hasCoord ? r.latitude! : -6.9147 + rand(r.id) * 0.05,
+          lng: hasCoord ? r.longitude! : 107.6098 + rand(r.id) * 0.05,
+          dummy: !hasCoord
+        };
+      }));
+      setLoading(false);
+    })();
+  }, []);
+
+  const persenTarget = stats.target_suara > 0 ? (stats.suara_c1 / stats.target_suara) * 100 : 0;
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
-        
-        <div className="text-center mb-8">
-          <div className="mx-auto w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mb-4">
-            <span className="text-white text-2xl font-bold">SC</span>
+    <div className="space-y-6">
+      {/* Header Profil Caleg & Progress */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border p-6 flex flex-col sm:flex-row items-center gap-6">
+          <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-4xl">👤</div>
+          <div className="flex-1 text-center sm:text-left">
+            <h2 className="text-xl font-bold text-blue-900">{stats.profil?.nama_caleg || "Nama Caleg Belum Diatur"}</h2>
+            <p className="text-sm text-gray-500">{stats.profil?.partai || "Partai"} - {stats.profil?.dapil || "Dapil"}</p>
+            <div className="mt-4 flex flex-wrap gap-2 justify-center sm:justify-start">
+               <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold">Edit Profil</button>
+               <button className="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg text-sm font-semibold">Edit Target</button>
+            </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">SIMCALEG</h1>
-          <p className="text-gray-500 text-sm mt-1">Sistem Informasi Manajemen Caleg</p>
         </div>
 
-        {errorMsg && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm text-center font-medium">
-            {errorMsg}
+        <div className="bg-white rounded-xl shadow-sm border p-6 text-center">
+          <h3 className="text-sm font-semibold text-gray-600 mb-4">Progres Pemenangan</h3>
+          <div className="relative w-32 h-32 mx-auto rounded-full flex items-center justify-center" style={{ background: `conic-gradient(#1d4ed8 ${persenTarget}%, #e5e7eb 0)` }}>
+             <div className="absolute inset-2 bg-white rounded-full flex flex-col items-center justify-center">
+                <span className="text-2xl font-bold text-gray-800">{persenTarget.toFixed(0)}%</span>
+                <span className="text-xs text-gray-500">tercapai</span>
+             </div>
           </div>
-        )}
-
-        <form onSubmit={handleLogin} className="space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input 
-              type="email" 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900" 
-              placeholder="caleg@simcaleg.com" 
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input 
-              type="password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900" 
-              placeholder="••••••••" 
-            />
-          </div>
-
-          <button 
-            type="submit" 
-            disabled={isLoading}
-            className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-200 mt-2 disabled:bg-blue-300"
-          >
-            {isLoading ? 'Memeriksa...' : 'Masuk ke Sistem'}
-          </button>
-        </form>
-
+          <p className="mt-4 text-xs text-gray-500">Target: {stats.target_suara.toLocaleString()} Suara</p>
+        </div>
       </div>
-    </main>
+
+      {/* Grid Statistik Utama */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: "Total Pendukung", value: stats.pendukung, icon: "👥", color: "bg-blue-100 text-blue-800" },
+          { label: "Total Relawan", value: stats.relawan, icon: "🙋", color: "bg-emerald-100 text-emerald-800" },
+          { label: "Logistik Tercatat", value: stats.logistik, icon: "📦", color: "bg-amber-100 text-amber-800" },
+          { label: "Suara Masuk (C1)", value: stats.suara_c1, icon: "🗳️", color: "bg-purple-100 text-purple-800" },
+        ].map((s, i) => (
+          <div key={i} className="bg-white p-4 rounded-xl shadow-sm border flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${s.color}`}>{s.icon}</div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium">{s.label}</p>
+              <p className="text-lg font-bold text-gray-800">{loading ? "..." : s.value.toLocaleString()}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Peta Monitoring */}
+      <div className="bg-white rounded-xl shadow-sm border p-4">
+        <h3 className="font-semibold text-blue-900 mb-4">Peta Sebaran Pendukung</h3>
+        {!loading && <MapView points={points} />}
+      </div>
+    </div>
   );
 }

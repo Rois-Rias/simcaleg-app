@@ -1,74 +1,120 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
-import { useEffect, useState } from 'react';
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { clearSession, getNama, getRole } from "@/lib/rbac";
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
+const MENU = [
+  { href: "/dashboard", label: "Dashboard Pemenangan", icon: "📊" },
+  { href: "/dashboard/profil", label: "Profil Calon", icon: "👤" },
+  { href: "/dashboard/pendukung", label: "Pendukung", icon: "👥" },
+  { href: "/dashboard/relawan", label: "Relawan", icon: "🙋" },
+  { href: "/dashboard/logistik", label: "Logistik", icon: "📦" },
+  { href: "/dashboard/quickcount", label: "Perhitungan Calon", icon: "🗳️" },
+  { href: "/dashboard/absensi", label: "Absensi Saksi", icon: "✅" },
+  { href: "/dashboard/isu", label: "Manajemen Isu", icon: "📰" },
+  { href: "/dashboard/monitoring", label: "Monitoring Wilayah", icon: "📍" },
+  { href: "/dashboard/rekomendasi", label: "Rekomendasi Strategi", icon: "💡" },
+];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [open, setOpen] = useState(false);
+  const [nama, setNama] = useState("");
+  const [role, setRole] = useState("relawan");
+  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    });
+    setNama(getNama());
+    setRole(getRole());
   }, []);
 
-  const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') setDeferredPrompt(null);
-    }
-  };
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallEvent(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
 
-  const handleLogout = async () => {
+  useEffect(() => { setOpen(false); }, [pathname]);
+
+  async function handleLogout() {
     await supabase.auth.signOut();
-    localStorage.removeItem('role');
-    router.push('/');
-  };
+    clearSession();
+    router.replace("/");
+  }
 
-  const menuItems = [
-    { name: 'Dashboard', path: '/dashboard' },
-    { name: 'Data Pendukung', path: '/dashboard/pendukung' },
-    { name: 'Tim Relawan', path: '/dashboard/relawan' },
-    { name: 'Logistik', path: '/dashboard/logistik' },
-    { name: 'Quick Count', path: '/dashboard/quickcount' },
-  ];
+  async function handleInstall() {
+    if (!installEvent) return;
+    await installEvent.prompt();
+    const choice = await installEvent.userChoice;
+    if (choice.outcome === "accepted") setInstallEvent(null);
+  }
 
   return (
-    <aside className="w-full md:w-64 bg-blue-800 text-white md:min-h-screen p-4 flex flex-col justify-between">
-      <div>
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-blue-800 font-bold">SC</div>
-          <h1 className="text-xl font-bold">SIMCALEG</h1>
+    <>
+      <header className="lg:hidden fixed top-0 inset-x-0 z-40 h-14 bg-blue-800 text-white flex items-center justify-between px-4 shadow-md">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">🗳️</span>
+          <span className="font-bold tracking-wide">SIMCALEG</span>
         </div>
-        <nav className="flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-visible">
-          {menuItems.map((item) => (
-            <Link 
-              key={item.path} 
-              href={item.path} 
-              className={`px-4 py-2 rounded-lg whitespace-nowrap transition ${pathname === item.path ? 'bg-blue-900 font-semibold' : 'hover:bg-blue-700'}`}
-            >
-              {item.name}
-            </Link>
-          ))}
-        </nav>
-      </div>
-      
-      <div className="mt-8 space-y-2">
-        {deferredPrompt && (
-          <button onClick={handleInstallClick} className="w-full text-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition font-semibold text-sm">
-            📲 Install Aplikasi
-          </button>
-        )}
-        <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-red-300 hover:text-white hover:bg-red-600 rounded-lg transition">
-          Logout
+        <button onClick={() => setOpen((v) => !v)} className="text-2xl p-1">
+          {open ? "✕" : "☰"}
         </button>
-      </div>
-    </aside>
+      </header>
+
+      {open && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setOpen(false)} />
+      )}
+
+      <aside className={`fixed z-50 top-0 left-0 h-full w-72 bg-blue-800 text-white flex flex-col transition-transform duration-200 ${open ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}>
+        <div className="h-16 hidden lg:flex items-center gap-2 px-5 border-b border-blue-700/60">
+          <span className="text-2xl">🗳️</span>
+          <div>
+            <p className="font-bold tracking-wide leading-none">SIMCALEG</p>
+            <p className="text-[10px] text-blue-200 mt-1">Pemenangan Caleg</p>
+          </div>
+        </div>
+
+        <div className="h-14 lg:hidden" />
+        <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
+          {MENU.map((item) => {
+            const active = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
+            return (
+              <Link key={item.href} href={item.href} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${active ? "bg-white text-blue-900 shadow" : "text-blue-100 hover:bg-blue-700/60"}`}>
+                <span className="text-lg">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="border-t border-blue-700/60 p-3 space-y-2">
+          {installEvent && (
+            <button onClick={handleInstall} className="w-full rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold py-2 transition">
+              ⬇️ Install Aplikasi
+            </button>
+          )}
+          <div className="rounded-lg bg-blue-900/60 px-3 py-2">
+            <p className="text-xs text-blue-200">Masuk sebagai</p>
+            <p className="text-sm font-semibold text-white truncate">{nama || "-"}</p>
+            <span className="inline-block mt-1 text-[10px] uppercase rounded bg-blue-600 px-2 py-0.5 text-white">{role}</span>
+          </div>
+          <button onClick={handleLogout} className="w-full rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-2 transition">
+            Keluar
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

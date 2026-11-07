@@ -1,81 +1,190 @@
-'use client';
-import { useState, useEffect } from 'react';
-import { supabase } from '../../../lib/supabase';
+"use client";
 
-export default function TimRelawan() {
-  const [data, setData] = useState<any[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ nama: '', no_hp: '', role: 'Kordes', wilayah: '' });
+import { useCallback, useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import Modal from "@/app/components/Modal";
 
-  const fetchData = async () => {
-    const { data: res } = await supabase.from('relawan').select('*').order('created_at', { ascending: false });
-    if (res) setData(res);
-  };
+type Relawan = {
+  id: number;
+  nama: string;
+  no_hp: string | null;
+  role: string | null;
+  wilayah: string | null;
+  created_at: string;
+};
 
-  useEffect(() => { fetchData(); }, []);
+type FormState = {
+  nama: string;
+  no_hp: string;
+  role: string;
+  wilayah: string;
+};
 
-  const handleSimpan = async (e: React.FormEvent) => {
+const EMPTY: FormState = { nama: "", no_hp: "", role: "Relawan", wilayah: "" };
+
+export default function RelawanPage() {
+  const [rows, setRows] = useState<Relawan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [form, setForm] = useState<FormState>(EMPTY);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error: err } = await supabase
+      .from("relawan")
+      .select("*")
+      .order("id", { ascending: false });
+    if (err) setError(err.message);
+    else setRows((data ?? []) as Relawan[]);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  function openCreate() {
+    setEditingId(null);
+    setForm(EMPTY);
+    setOpen(true);
+  }
+
+  function openEdit(row: Relawan) {
+    setEditingId(row.id);
+    setForm({
+      nama: row.nama ?? "",
+      no_hp: row.no_hp ?? "",
+      role: row.role ?? "Relawan",
+      wilayah: row.wilayah ?? "",
+    });
+    setOpen(true);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    await supabase.from('relawan').insert([formData]);
-    setIsModalOpen(false);
-    setFormData({ nama: '', no_hp: '', role: 'Kordes', wilayah: '' });
-    fetchData();
-  };
+    setSaving(true);
+    setError(null);
+
+    const payload = {
+      nama: form.nama.trim(),
+      no_hp: form.no_hp.trim() || null,
+      role: form.role || null,
+      wilayah: form.wilayah.trim() || null,
+    };
+
+    const res = editingId
+      ? await supabase.from("relawan").update(payload).eq("id", editingId)
+      : await supabase.from("relawan").insert(payload);
+
+    setSaving(false);
+
+    if (res.error) {
+      setError(res.error.message);
+      return;
+    }
+
+    setOpen(false);
+    await load();
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm("Hapus data relawan ini?")) return;
+    const { error: err } = await supabase.from("relawan").delete().eq("id", id);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setRows((prev) => prev.filter((r) => r.id !== id));
+  }
 
   return (
-    <div>
-      <header className="flex justify-between items-center mb-6">
+    <div className="space-y-5">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">Tim Relawan</h2>
-          <p className="text-gray-500 text-sm">Manajemen struktur tim pemenangan.</p>
+          <h1 className="text-2xl font-bold text-blue-900">Data Relawan</h1>
+          <p className="text-sm text-gray-500">Kelola tim relawan, saksi, dan wilayah kerja.</p>
         </div>
-        <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700">+ Tambah Relawan</button>
+        <button onClick={openCreate} className="rounded-lg bg-blue-800 hover:bg-blue-900 text-white text-sm font-semibold px-4 py-2">
+          + Tambah Relawan
+        </button>
       </header>
 
+      {error && <div className="rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3">{error}</div>}
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 text-sm">
-            <tr>
-              <th className="p-4">Nama</th>
-              <th className="p-4">No. HP</th>
-              <th className="p-4">Role</th>
-              <th className="p-4">Wilayah</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((item) => (
-              <tr key={item.id} className="border-b hover:bg-gray-50">
-                <td className="p-4 font-medium text-gray-800">{item.nama}</td>
-                <td className="p-4 text-gray-600">{item.no_hp}</td>
-                <td className="p-4"><span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{item.role}</span></td>
-                <td className="p-4 text-gray-600">{item.wilayah}</td>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-blue-800 text-white">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold">No</th>
+                <th className="px-4 py-3 text-left font-semibold">Nama</th>
+                <th className="px-4 py-3 text-left font-semibold">No. HP</th>
+                <th className="px-4 py-3 text-left font-semibold">Role</th>
+                <th className="px-4 py-3 text-left font-semibold">Wilayah</th>
+                <th className="px-4 py-3 text-center font-semibold">Aksi</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-500">Memuat data…</td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-500">Belum ada data relawan.</td></tr>
+              ) : (
+                rows.map((row, idx) => (
+                  <tr key={row.id} className="hover:bg-blue-50/60">
+                    <td className="px-4 py-3 text-gray-500">{idx + 1}</td>
+                    <td className="px-4 py-3 font-medium text-gray-800">{row.nama}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.no_hp ?? "-"}</td>
+                    <td className="px-4 py-3"><span className="inline-block rounded-full bg-emerald-100 text-emerald-800 text-xs px-2.5 py-1">{row.role ?? "-"}</span></td>
+                    <td className="px-4 py-3 text-gray-600">{row.wilayah ?? "-"}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-center gap-2">
+                        <button onClick={() => openEdit(row)} className="rounded-md bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3 py-1.5">Edit</button>
+                        <button onClick={() => handleDelete(row.id)} className="rounded-md bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-1.5">Hapus</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-lg">
-            <h3 className="font-bold text-lg mb-4">Tambah Relawan</h3>
-            <form onSubmit={handleSimpan} className="space-y-3">
-              <input required placeholder="Nama Lengkap" value={formData.nama} onChange={e => setFormData({...formData, nama: e.target.value})} className="w-full border p-2 rounded" />
-              <input placeholder="No HP" value={formData.no_hp} onChange={e => setFormData({...formData, no_hp: e.target.value})} className="w-full border p-2 rounded" />
-              <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full border p-2 rounded">
-                <option value="Korcam">Korcam</option>
-                <option value="Kordes">Kordes</option>
-                <option value="Kor TPS">Kor TPS</option>
-              </select>
-              <input placeholder="Wilayah Tugas" value={formData.wilayah} onChange={e => setFormData({...formData, wilayah: e.target.value})} className="w-full border p-2 rounded" />
-              <div className="flex justify-end gap-2 mt-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600">Batal</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">Simpan</button>
-              </div>
-            </form>
+      <Modal open={open} title={editingId ? "Edit Relawan" : "Tambah Relawan"} onClose={() => setOpen(false)}>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nama <span className="text-red-500">*</span></label>
+            <input required value={form.nama} onChange={(e) => setForm({ ...form, nama: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none" />
           </div>
-        </div>
-      )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">No. HP</label>
+              <input value={form.no_hp} onChange={(e) => setForm({ ...form, no_hp: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none">
+                <option value="Koordinator">Koordinator</option>
+                <option value="Relawan">Relawan</option>
+                <option value="Saksi">Saksi</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Wilayah</label>
+            <input value={form.wilayah} onChange={(e) => setForm({ ...form, wilayah: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none" />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold px-4 py-2 hover:bg-gray-50">Batal</button>
+            <button type="submit" disabled={saving} className="rounded-lg bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-semibold px-4 py-2">{saving ? "Menyimpan…" : "Simpan"}</button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

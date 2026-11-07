@@ -1,15 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  async rewrites() {
-    return [
-      {
-        source: '/api/supabase/:path*',
-        // Hapus huruf 's' sebelum 'psddbelep'
-        destination: 'https://tkgbahpoqakpsddbelep.supabase.co/:path*',
-      },
-    ];
-  },
+  // Biarkan kosong. Proxy akan ditangani oleh API Route di folder app/api
 };
 
 export default nextConfig;
